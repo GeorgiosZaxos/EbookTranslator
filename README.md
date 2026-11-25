@@ -1,24 +1,74 @@
 # Standalone Ebook Translator
 
-A standalone PyQt6 desktop application inspired by the document-processing and translation architecture of
-[bookfere/Ebook-Translator-Calibre-Plugin](https://github.com/bookfere/Ebook-Translator-Calibre-Plugin).
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/)
+[![GUI](https://img.shields.io/badge/GUI-PyQt6-41cd52)](https://pypi.org/project/PyQt6/)
+[![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-orange)](LICENSE)
 
-**This is an independent first implementation, not a complete port of the Calibre plugin.**
-It does not require Calibre. It currently supports EPUB, SRT and PGN input, the original plugin's free online translation
-endpoints (Google Translate Free, DeepL Free web, and experimental Microsoft Edge Free), an
-OpenAI-compatible chat-completions endpoint (including Ollama), resumable JSON progress checkpoints,
-glossary substitutions, background translation and EPUB output reconstruction.
+A desktop application that translates EPUB books, SRT subtitles and PGN chess games — without Calibre.
+It runs on free public translation endpoints (no API key) or on any OpenAI-compatible endpoint,
+including a local Ollama install.
+
+The architecture and workflow are inspired by
+[bookfere/Ebook-Translator-Calibre-Plugin](https://github.com/bookfere/Ebook-Translator-Calibre-Plugin).
+**This is an independent implementation, not a port of that plugin**, and it contains no copied upstream
+source files. See [UPSTREAM_NOTICES.md](UPSTREAM_NOTICES.md).
+
+Current version: **1.0.0** — see [CHANGELOG.md](CHANGELOG.md) for the release history.
+
+---
+
+## Highlights
+
+- **Full-text EPUB translation** — XHTML text nodes, document titles, metadata (title/description/subjects),
+  EPUB 3 navigation and EPUB 2 NCX/TOC labels, image alt text and accessibility descriptions.
+  Inline formatting and hyperlinks are preserved because individual text nodes are replaced, not whole paragraphs.
+- **No key required** — Google Translate Free (new/HTML/legacy) and DeepL Free Web work out of the box.
+- **Bring your own model** — any OpenAI-compatible `/chat/completions` endpoint, e.g. Ollama at
+  `http://localhost:11434/v1`.
+- **Resume after a crash** — append-only JSON Lines checkpoints are flushed per translated unit and reused on restart.
+- **Directional glossaries** — separate English→Greek and Greek→English term files with placeholder protection.
+- **Parallel translation** — 1–10 workers, capped per provider, with a responsive Qt UI and an in-window log panel.
+- **Output validation** — the generated EPUB is checked for ZIP integrity, `mimetype`, OPF manifest completeness,
+  and is reopened with EbookLib before the checkpoint is discarded.
+
+## Supported formats
+
+| Format | Input | What gets translated | Preserved |
+|---|---|---|---|
+| EPUB | `.epub` | Text nodes, metadata, TOC/navigation labels, image alt and ARIA labels, filename stem | Markup, inline tags, hyperlinks, images, authors, identifiers, dates, URLs |
+| SRT | `.srt` | Subtitle text | Sequence numbers, timestamps |
+| PGN | `.pgn` | Brace-delimited `{ comments }` | Moves and all other notation |
+
+## Translation providers
+
+| Provider | API key | Max workers | Notes |
+|---|---|---|---|
+| Google Translate (Free – New) | no | 3 | Default and recommended |
+| Google Translate (Free – HTML) | no | 3 | Fallback endpoint |
+| Google Translate (Free – Legacy) | no | 3 | Fallback endpoint |
+| DeepL (Free – Web) | no | 1 | Forced serial to reduce throttling |
+| Microsoft Edge (Free – Experimental) | no | 2 | Upstream endpoint has returned HTTP 404 |
+| OpenAI-compatible / Ollama | optional | up to 10 | Set endpoint + model (default `llama3`) |
+
+Free endpoints are unofficial web interfaces, not guaranteed public APIs. Availability, rate limits and terms
+can change, and requests may be throttled or blocked.
 
 ## Requirements
 
-- Windows 11 (other platforms should work)
-- Python 3.13+
-- A reachable OpenAI-compatible API endpoint, or Ollama running locally
+- Python 3.13 or newer
+- Developed on Windows 11; other desktop platforms should work (settings fall back to `~/.config`)
+- Optional: a reachable OpenAI-compatible endpoint, or Ollama running locally
 
-## Setup in PyCharm / PowerShell
+## Installation
+
+```bash
+git clone https://github.com/GeorgiosZaxos/EbookTranslator.git
+cd EbookTranslator
+```
+
+**Windows (PowerShell)**
 
 ```powershell
-cd D:\Programming\PythonProduction\EbookTranslator
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -26,171 +76,161 @@ pip install -r requirements.txt
 python -m ebook_translator
 ```
 
-Alternatively install the project in editable mode:
+**Linux / macOS**
 
-```powershell
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m ebook_translator
+```
+
+Or install the project and use the console script:
+
+```bash
 pip install -e .
 ebook-translator
 ```
 
-## First run
+## Usage
 
-1. Configure the translation service directly in the main window.
-2. Select **Google Translate (Free - New)** to use the recommended no-key free online service.
-3. Alternatively select Google Translate Free HTML/Legacy or DeepL Free Web.
-4. Microsoft Edge Free is included as experimental; its endpoint has been reported to return HTTP 404.
-5. Set the source/target languages and parallel worker count. The model field remains visible and defaults to `llama3` for Ollama/API use.
-6. Browse for an EPUB, SRT or PGN file and select an output path.
-7. Start translation.
+1. Pick a **Provider**. `Google Translate (Free - New)` needs no key or endpoint.
+2. Set **Source language** (or `Auto-detect`) and **Target language**.
+3. Adjust **Parallel workers**, **Segment size**, **Timeout**, **Temperature** and **Max tokens** if needed.
+   For an OpenAI-compatible provider also set **Endpoint** and **Model**, and optionally an **API key**.
+4. **Browse…** for an `.epub`, `.srt` or `.pgn` file and choose the output path with **Save as…**.
+5. Click **Start translation**. Progress and log output appear in the window.
 
-The OpenAI-compatible/Ollama option remains available but is not required for the free online services.
+Settings on the main screen save automatically. The **API key is held in memory for the current session only**
+and is never written to the settings file.
 
-The API key is kept in memory for the current application session. It is not written to the settings file.
+### Controls and logging
 
-## Application controls and logging
+- **Stop** requests a cooperative stop; the job ends once the active network request finishes.
+- **Exit** closes the application, but keeps the window open until a running provider request can stop safely.
+- **Clear log** (button or *File → Clear log*) empties the panel.
+- The **Log level** selector (DEBUG…CRITICAL) is saved and restored between launches.
+- Console logging handlers are removed on purpose: log records go to the in-window panel, not to the shell
+  or the IDE run console. Severity levels are colour-coded.
+- The window opens centred at 90% of the available screen area.
 
-Application logs are displayed in the **Application log** panel inside the window.
-The app removes console logging handlers so routine INFO, WARNING, ERROR, and DEBUG
-messages are not written to the PyCharm Run console or shell. Use **Stop** to request
-a cooperative stop after the active network request completes. Use **Exit** to close
-the application; if a provider request is still running, the window remains open until
-the worker can stop safely.
+### Glossaries
 
-## Current implementation scope (0.1.8)
-
-- EPUB: translates XHTML text nodes throughout the book, the EPUB title/description/subjects, document titles, table of contents/navigation labels, image alt text and accessibility labels. Inline formatting and hyperlinks are retained.
-- SRT: translates subtitle text while preserving sequence numbers and timestamps.
-- PGN: translates brace-delimited comments while preserving the rest of the game notation.
-- Translation cache: uses a thread-safe in-memory cache during the current run.
-- Resumability: writes an append-only JSON Lines checkpoint beside the source EPUB in `.translation_progress`; completed text units are flushed to disk immediately and reused after restart. The checkpoint is deleted only after the generated EPUB passes ZIP, OPF-manifest resource, and EbookLib validation.
-- Parallel translation: configurable 1–10 workers (default 3); provider limits are respected, including serial DeepL Free requests.
-- Glossaries: separate English→Greek and Greek→English UTF-8 files; automatic direction selection, placeholder protection, and a legacy single-file settings migration.
-- Background work: translation runs in a `QThread` with a bounded thread pool for EPUB units; the UI remains responsive.
-- Logging: console and GUI log panel, with DEBUG/INFO/WARNING/ERROR levels.
-
-## Known limitations
-
-- Text embedded inside raster images is not OCR-translated. Image alt text and accessible descriptions are translated.
-- Author names, publisher names, identifiers, dates, URLs, code samples and structural EPUB attributes are preserved rather than translated.
-- Some unusual EPUB navigation structures or proprietary metadata extensions may not expose their labels to EbookLib.
-- EPUB encrypted resources, unusual font obfuscation and malformed package recovery are not implemented.
-- Free public endpoints are unofficial web interfaces, not guaranteed public APIs. Their availability, rate limits and terms can change. Google/DeepL may throttle or block automated requests.
-- Microsoft Edge Free is marked experimental because the upstream endpoint has had reported HTTP 404 failures.
-- Only one active translation job is supported by the GUI. Parallel workers operate within that single EPUB job.
-- Provider support is currently OpenAI-compatible chat completions. Gemini, Anthropic, DeepL and other native
-  provider adapters should be added as separate implementations rather than hidden behind provider-specific
-  conditionals.
-- Translation quality depends on the selected model and prompt. Review output before publication.
-
-## Project structure
-
-```text
-ebook_translator/
-  app.py                 Application entry point
-  config.py              Runtime settings
-  domain.py              Translation data contracts
-  logging_config.py      Logging setup
-  gui/
-    main_window.py       PyQt6 main window
-    settings_dialog.py   Provider and language settings
-  ingestion/
-    epub.py              EPUB parsing and reconstruction
-    package_utils.py     OPF manifest/ZIP consistency and missing-resource repair
-    text_formats.py      SRT and PGN adapters
-  translation/
-    glossary.py          Glossary replacement/restoration
-    providers.py         Provider interface and OpenAI-compatible adapter
-    service.py           Retry, cache and translation orchestration
-  persistence/
-    cache.py             Thread-safe in-memory cache
-    checkpoint.py        Append-only JSON Lines job checkpoints
-  workers/
-    translation_worker.py QThread worker
-```
-
-## Settings and data
-
-- Settings: `%APPDATA%/EbookTranslator/settings.json`
-- Temporary progress: `<source folder>/.translation_progress/<book>.<job-id>.jsonl` (automatically removed after successful EPUB validation)
-- Glossaries: `%APPDATA%/EbookTranslator/glossaries/English-Greek.txt` and `Greek-English.txt`; each can also be pointed to a custom file from the main screen.
-
-## Licence and attribution
-
-This derivative project is distributed under **GNU GPL-3.0-only**, consistent with the
-upstream repository's GPL-3.0 licence. The upstream project is:
-
-- Repository: https://github.com/bookfere/Ebook-Translator-Calibre-Plugin
-- Copyright and licensing notices in upstream files remain applicable to any upstream-derived code.
-- This standalone scaffold is marked as a new implementation and does not include copied upstream source files.
-
-See `LICENSE` for the licence text.
-
-
-### Window and logging preferences
-
-The main window opens centered at 90% of the available screen area. Use the **Log level** selector above the application log to choose DEBUG, INFO, WARNING, ERROR, or CRITICAL. The selection is saved in the user settings and restored on the next launch. Logs remain inside the application.
-
-### Parallel translation and restart recovery (0.1.7)
-
-Open **Settings** and set **Parallel workers (EPUB)** from 1 to 10 (default 3).
-Google Free and OpenAI-compatible providers use up to the selected number of workers;
-DeepL Free is restricted to one worker to reduce throttling risk, and Microsoft Edge
-Free is restricted to two. Each worker uses its own HTTP session.
-
-For EPUB jobs, the application creates a JSON Lines checkpoint in a dedicated dot-prefixed
-`.translation_progress` folder beside the source book. Its identity includes the source
-file SHA-256, language pair, provider/model settings, segment size and glossary. Each
-completed text node, metadata value or navigation label is flushed to the checkpoint
-before progress advances. On restart, matching completed units are restored and only
-unfinished units are requested again. Failed/in-progress units are retried. A changed
-source EPUB or incompatible translation settings creates a separate checkpoint.
-
-The checkpoint is deleted only after the output EPUB passes ZIP integrity checks and
-can be reopened by EbookLib. If output generation or validation fails, progress remains
-available for another attempt. SRT and PGN remain sequential and do not currently use
-job checkpoints. As with any remote translation API, absolute exactly-once delivery cannot
-be guaranteed if the process or network fails after the provider completes a request but
-before the response is durably checkpointed; all successfully checkpointed units are reused.
-
-
-### Main-window settings and log display (0.1.7)
-
-Provider, endpoint, model (default `llama3`), source/target languages, parallel workers, segment size, timeout, temperature, output-token limit and glossary path are visible on the main screen. Settings save automatically. The API key is kept in memory for the current session only. Log records use distinct colors by severity, and Clear log is available beside Exit and in the File menu.
-
-
-## Version 0.1.7 UI changes
-
-Translation settings are displayed on the main screen and saved automatically. The model field is always visible (default `llama3`), even when a free online provider is selected. DEBUG, INFO, WARNING, ERROR and CRITICAL log records have separate colors. Use **Clear log** immediately before **Exit**, or use File → Clear log.
-
-
-### Direction-specific glossaries (0.1.8)
-
-The main window has independent **English → Greek** and **Greek → English**
-glossary path fields with Browse buttons. On first launch, editable starter files
-are created in `%APPDATA%/EbookTranslator/glossaries/`. The application chooses
-the matching file from the selected source and target languages. Auto-detect →
-Greek uses the English → Greek file; Auto-detect → English uses the Greek →
-English file. For other language pairs, the former single-glossary setting remains
-available as a compatibility fallback.
+The main window has independent **English → Greek** and **Greek → English** glossary fields, each with a
+Browse button. On first launch, editable starter files are created under the per-user data directory, so
+upgrades never overwrite your terminology. The matching file is selected from the language pair
+(`Auto-detect → Greek` uses English → Greek; `Auto-detect → English` uses Greek → English). For other pairs,
+the legacy single-glossary setting still applies as a fallback.
 
 Each glossary is a UTF-8 text file with one exact mapping per line:
 
 ```text
+# Lines beginning with '#' are comments
 Hobbit=Χόμπιτ
 The Shire=Το Σάιρ
 One Ring=Το Ένα Δαχτυλίδι
 ```
 
-Lines beginning with `#` are comments. Longer phrases are matched before shorter
-terms. The source terms are replaced with protected placeholders before translation
-and restored using the configured target terms afterwards.
+Longer phrases are matched before shorter terms. Source terms are swapped for protected placeholders before
+translation and restored as the configured target terms afterwards.
 
-### EPUB package repair and validation (0.1.8)
+### Resuming an interrupted EPUB job
 
-After EbookLib writes the translated book, the application checks every local
-resource referenced by the OPF manifest against the actual ZIP members. Missing
-resources are restored from the current in-memory book item (which contains the
-translated content), with conservative archive/source fallbacks. If a resource
-cannot be recovered, the job fails with the missing manifest paths and retains
-the JSONL checkpoint. Final validation checks ZIP integrity, the EPUB `mimetype`
-entry, all manifest references, and then reopens the EPUB with EbookLib.
+EPUB jobs write a checkpoint to a dot-prefixed `.translation_progress` folder beside the source book. The
+checkpoint identity includes the source file SHA-256, language pair, provider/model settings, segment size and
+glossary, so a changed book or changed settings starts a separate checkpoint instead of mixing results.
+
+Every completed text node, metadata value and navigation label is flushed to disk before progress advances.
+On restart, finished units are restored and only the unfinished ones are requested again. The checkpoint is
+deleted only after the output EPUB passes validation; if generation or validation fails, progress stays on disk
+for the next attempt.
+
+Missing resources referenced by the OPF manifest are repaired from the translated in-memory EbookLib item,
+with conservative archive and source fallbacks. If a resource cannot be recovered, the job fails and reports the
+missing manifest paths.
+
+Exactly-once delivery cannot be guaranteed if the process dies after a provider responds but before the
+response is checkpointed; every durably checkpointed unit is reused.
+
+SRT and PGN jobs run sequentially and do not use checkpoints.
+
+## Settings and data locations
+
+| What | Where |
+|---|---|
+| Settings | `%APPDATA%\EbookTranslator\settings.json` (`~/.config/EbookTranslator/` elsewhere) |
+| Glossaries | `%APPDATA%\EbookTranslator\glossaries\English-Greek.txt`, `Greek-English.txt` |
+| Job progress | `<source folder>/.translation_progress/<book>.<job-id>.jsonl` (removed after successful validation) |
+
+Bundled starter glossaries live in [`glossaries/`](glossaries).
+
+## Project structure
+
+```text
+ebook_translator/
+  __main__.py             python -m ebook_translator entry point
+  app.py                  Application bootstrap
+  config.py               Persisted settings dataclass
+  domain.py               Translation data contracts
+  logging_config.py       Logging setup
+  text_utils.py           Entity decoding and safe filenames
+  gui/
+    main_window.py        PyQt6 main window, settings and log panel
+    settings_dialog.py    Standalone provider/language dialog (not wired into the main window)
+  ingestion/
+    epub.py               EPUB parsing and reconstruction
+    package_utils.py      OPF/ZIP consistency and missing-resource repair
+    text_formats.py       SRT and PGN adapters
+  translation/
+    free_online.py        Google, DeepL and Microsoft Edge free adapters
+    providers.py          Provider interface and OpenAI-compatible adapter
+    glossary.py           Glossary replacement and restoration
+    service.py            Retry, cache and translation orchestration
+  persistence/
+    cache.py              Thread-safe in-memory cache
+    checkpoint.py         Append-only JSON Lines job checkpoints
+  workers/
+    translation_worker.py QThread worker and output naming
+tests/                    pytest suite
+glossaries/               Bundled starter glossary templates
+```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+ruff check .
+```
+
+Tests cover EPUB namespace extraction, EPUB package repair and manifest validation, checkpoints,
+the in-memory cache, directional glossary selection, the translation service and text utilities.
+
+Design conventions worth keeping:
+
+- New providers are separate adapter classes, not provider-specific branches inside existing code.
+- Persistent job state stays in the JSON Lines checkpoints; the translation cache is in-memory and per-run.
+- Translated content is written through text nodes so markup and links survive.
+
+## Known limitations
+
+- Text baked into raster images is not OCR-translated (alt text and accessible descriptions are translated).
+- Author names, publishers, identifiers, dates, URLs, code samples and structural EPUB attributes are
+  preserved rather than translated.
+- Unusual EPUB navigation structures or proprietary metadata extensions may not expose labels to EbookLib.
+- Encrypted EPUB resources, font obfuscation and malformed-package recovery are not implemented.
+- Free public endpoints may throttle, block or disappear; Microsoft Edge Free is experimental.
+- The GUI runs one translation job at a time; parallel workers operate within that single job.
+- Native Gemini, Anthropic and paid DeepL adapters are not implemented yet.
+- Translation quality depends on the chosen provider, model and prompt. Review output before publishing.
+
+## Licence and attribution
+
+Distributed under **GNU GPL-3.0-only**, consistent with the upstream project's licence. See [LICENSE](LICENSE).
+
+- Upstream inspiration: https://github.com/bookfere/Ebook-Translator-Calibre-Plugin
+- Upstream copyright and licensing notices remain applicable to any upstream-derived code.
+- This project is a new implementation and bundles no copied upstream source files.
+
+No warranty. Respect the terms of service of any translation endpoint you use.

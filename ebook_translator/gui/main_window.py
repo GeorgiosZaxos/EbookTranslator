@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ebook_translator import __version__
 from ebook_translator.config import AppConfig, app_data_dir
 from ebook_translator.persistence.cache import TranslationCache
 from ebook_translator.translation.glossary import Glossary, select_glossary_path
@@ -558,7 +559,7 @@ class MainWindow(QMainWindow):
     def _about(self) -> None:
         QMessageBox.about(
             self, "About Standalone Ebook Translator",
-            "Standalone Ebook Translator 0.1.7\n"
+            f"Standalone Ebook Translator {__version__}\n"
             "A standalone implementation inspired by Ebook Translator Calibre Plugin.\n"
             "GPL-3.0-only. No warranty.",
         )

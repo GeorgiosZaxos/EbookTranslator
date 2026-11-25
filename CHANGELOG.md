@@ -67,3 +67,12 @@
 - Repairs missing manifest resources from the translated in-memory EbookLib item before final validation.
 - Retains the job checkpoint if package resources cannot be recovered or EPUB validation fails.
 - Added regression tests for missing EPUB 3 navigation resources, manifest validation and directional glossary selection.
+
+
+## 1.0.0 - First public release
+
+- First release published to GitHub; the 0.1.x feature set is considered stable.
+- Unified the version number across `pyproject.toml`, `ebook_translator/__init__.py` and the About dialog;
+  the About dialog now reads `__version__` instead of a hard-coded string.
+- Rewrote `README.md` as project documentation: platform-neutral setup, clone instructions, provider and
+  format tables, data locations, development commands, and release history moved to this changelog.
