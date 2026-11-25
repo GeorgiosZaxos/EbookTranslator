@@ -1,0 +1,4 @@
+PyQt6>=6.7
+EbookLib>=0.18
+lxml>=5.2
+requests>=2.32

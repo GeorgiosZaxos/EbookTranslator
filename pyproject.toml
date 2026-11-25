@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ebook-translator-standalone"
+version = "0.1.8"
+description = "Standalone PyQt6 ebook translation application"
+requires-python = ">=3.13"
+license = { text = "GPL-3.0-only" }
+dependencies = [
+  "PyQt6>=6.7",
+  "EbookLib>=0.18",
+  "lxml>=5.2",
+  "requests>=2.32",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-qt>=4.4", "ruff>=0.6"]
+
+[project.scripts]
+ebook-translator = "ebook_translator.app:main"
+
+[tool.setuptools.packages.find]
+include = ["ebook_translator*"]
